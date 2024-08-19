@@ -11,6 +11,11 @@ from rosbags.typesys import Stores, get_typestore, get_types_from_idl, get_types
 from stamped_std_msgs.msg import Float32Stamped, Int32Stamped, TimeSync
 from ferrobotics_acf.msg import ACFTelemStamped, ACFTelem
 
+# ============================================ To change for every use ===================================================
+bagpath = Path('/workspaces/brightsky_project/ros_bags') / 'rosbag2_2024-08-16_13:56:28_sample0.1__f3_rpm8000_grit60_t10.0'
+plate_thickness         = 0.0           # in mm
+removed_material_depth  = 0.0           # in mm
+# ========================================================================================================================
 
 def path_to_type(path):
     parts = list(path.parts)
@@ -39,17 +44,23 @@ def process_acf_stamped(msg: ACFTelemStamped):
     return conv_time_ns(sec, nsec), msg.telemetry.force, msg.telemetry.position, msg.telemetry.in_contact
 
 def process_timesync(msg: TimeSync):
-    t1 = conv_time_ns(msg.header1.stamp.sec, msg.header1.stamp.nanosec) # rostime
-    t2 = conv_time_ns(msg.header2.stamp.sec, msg.header2.stamp.nanosec) # plctime
-    return t1, t2
+    if 'ros' in msg.header1.frame_id.lower():
+        ros_header = msg.header1
+        plc_header = msg.header2 
+    else:
+        ros_header = msg.header2
+        plc_header = msg.header1
+        
+    t_ros = conv_time_ns(ros_header.stamp.sec, ros_header.stamp.nanosec) # rostime
+    t_plc = conv_time_ns(plc_header.stamp.sec, plc_header.stamp.nanosec) # plctime
+    return t_ros, t_plc
 
-# Read definitions to python strings.
+# Relative path to the definition of each custom message type 
 msg_paths = [Path('src/stamped_std_msgs/msg/Float32Stamped.msg'),
              Path('src/stamped_std_msgs/msg/Int32Stamped.msg'),
              Path('src/stamped_std_msgs/msg/TimeSync.msg'),
              Path('src/ferrobotics_acf/msg/ACFTelem.msg'),
-             Path('src/ferrobotics_acf/msg/ACFTelemStamped.msg')
-             ]
+             Path('src/ferrobotics_acf/msg/ACFTelemStamped.msg')]
 
 # Create a dict for each topic. Entries should be
     # 'parser': a function that parses the msg type and returns a tuple in order (timestamp, d1, d2, d3) where dn are extracted data fields
@@ -79,9 +90,17 @@ add_types = {}
 typestore = get_typestore(Stores.ROS2_HUMBLE)
 typestore.register(add_types)
 
-bagpath = Path('/workspaces/brightsky_project/ros_bags/rosbag2_2024-08-12 13:33:05.918498')
 converted_bagpath = Path('csv_bags')
-csv_filename = converted_bagpath / f'{bagpath.parts[-1]}.csv'
+results = f'th{plate_thickness}_d{removed_material_depth}'
+csv_filename = converted_bagpath / f'{bagpath.parts[-1]}_{results}.csv'
+
+similar_result_files = [file for file in converted_bagpath.iterdir() if results in str(file.name)]
+if len(similar_result_files) > 0:
+    print(f'\n[WARNING]: another file with plate thickness {plate_thickness} and removed material {removed_material_depth} already exists.') 
+    print(f'[WARNING]: Make sure these are the correct numbers for this file.\n')
+
+if (plate_thickness is ...) or (removed_material_depth is ...) or (plate_thickness < 1e-9) or (removed_material < 1e-9):
+    raise TypeError(f'Please insert a valid plate thickness and removed material')
 
 # Read all messages and parse them according to the 'parcer' in topic_dict
 # Stores the messages for each respective topic in an np.ndarray located in topic_dict['topic_name']['array']
@@ -98,13 +117,13 @@ with AnyReader([bagpath], default_typestore=typestore) as reader:
 
 # Extract the timestamps from the 'TimeSync' messages
 rostime_offset, plctime_offset = topic_dict.pop('/timesync')['array'][0,:]                                        
-print(f'ROS time at first match: {rostime_offset}\nPLC time at first match: {plctime_offset}\n')
+# print(f'ROS time at first match: {rostime_offset} ns\nPLC time at first match: {plctime_offset} ns\n')
 
 
 # Synchronize the timestamps for all topics
 for key in topic_dict.keys():
     time_type = topic_dict[key]['timetype']
-    if 'plc' in time_type:
+    if 'plc' in time_type.lower():
         offset = plctime_offset
     else:
         offset = rostime_offset
@@ -121,7 +140,7 @@ for topic in topic_dict.keys():
 timestamp_sets = [set(topic_dict[topic]['array'][:,0]) for topic in topic_dict.keys()]
 unique_timestamp_set = timestamp_sets[0].union(*timestamp_sets[1:])
 unique_timestamps = sorted(list(unique_timestamp_set))
-print(f"Number of timestamps: {len(unique_timestamps)}")
+print(f"Number of timestamps: {len(unique_timestamps)} - ranging {unique_timestamps[-1]/10**9:.2f} seconds")
 
 # Sort keys so that the columns in the csv will stay in the same order on rerun
 keys_sorted = sorted([key for key in topic_dict.keys()])
@@ -144,4 +163,4 @@ with open(csv_filename, 'w') as f:
         
         entry = [timestamp] + [value for key in keys_sorted for value in entries[key]]
         f.write(','.join([str(value) for value in entry]) + '\n')
-
+        
