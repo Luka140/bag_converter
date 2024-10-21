@@ -1,2 +1,12 @@
-rosbags
+rosbags == 0.10.4
 pandas
+numpy == 1.24.0 # Newer vesions do not work with version of open3d
+pandas == 2.2.2
+pathlib
+concave_hull
+scipy
+matplotlib
+copy
+os
+glob
+open3d == 0.18.0

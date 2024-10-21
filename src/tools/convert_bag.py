@@ -5,11 +5,8 @@ from glob import glob
 
 import open3d as o3d
 
-from rosbags.rosbag2 import Reader
-from rosbags.serde import deserialize_cdr
-
 from rosbags.highlevel import AnyReader
-from rosbags.typesys import Stores, get_typestore, get_types_from_idl, get_types_from_msg
+from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 
 from stamped_std_msgs.msg import Float32Stamped, Int32Stamped, TimeSync
 from ferrobotics_acf.msg import ACFTelemStamped, ACFTelem
@@ -20,17 +17,18 @@ from pcl_processing_ros2 import PCLfunctions
 
 """
 The following script processes the rosbag time data into a .csv table which contains for every timestep:
-    - RPM
     - Force setpoint
     - Current force
     - flange position
+    - RPM
     - flange contact flag (does not seem to work correctly in the ACF driver)
+    - failure messages
 
+Values are None until the first timestep a message is received on that topic. 
+After that, next rows will always contain the latest received value for that topic. 
+    
 Required inputs:
-    - The file to procees
-    - The thickness of the plate
-    - The removed material depth
-
+    - Path to the file to procees
 """
 
 def path_to_type(path):
@@ -90,6 +88,20 @@ def strip_filename_timestamp(name):
 
 
 def convert_bag(bagpath, precomputed_volume_loss = None):
+    """Converts a rosbag file to a csv.
+    This function processes the rosbag time data into a .csv table which contains for every timestep:
+        - Force setpoint
+        - Current force
+        - flange position
+        - RPM
+        - flange contact flag (does not seem to work correctly in the ACF driver)
+        - failure messages
+
+    Args:
+        bagpath (Path): Path to the rosbag
+        precomputed_volume_loss (list[float], optional): List of precomputed volumes which will overwrite the values in the rosbag messages if applicable.
+
+    """
     # Relative path to the definition of each custom message type 
     msg_paths = [Path('src/stamped_std_msgs/msg/Float32Stamped.msg'),
                 Path('src/stamped_std_msgs/msg/Int32Stamped.msg'),
@@ -99,7 +111,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None):
 
     # Create a dict for each topic. Entries should be
         # 'parser': a function that parses the msg type and returns a tuple in order (timestamp, d1, d2, d3) where dn are extracted data fields
-        # 'column_headers': a list of column header strings for the above datafields (excluding timestamp)
+        # 'column_headers': a list of n column header strings for the above datafields (excluding timestamp)
         # 'timetype': either 'plc' or 'rpm' - the clock variation that these messages are timestamped in
         
     rpm_dict            = {'parser': process_int_float_stamped,
@@ -241,7 +253,16 @@ def convert_bag(bagpath, precomputed_volume_loss = None):
             f.write(','.join([str(value) for value in entry]) + '\n')
             
             
-def recalculate_volumes(bags):
+def recalculate_volumes(bags: list[Path]) -> list[float]:
+    """Recalculates the removed volume from tests using stored pointclouds 
+
+    Args:
+        bags (list[Path]): the paths of the rosbags for which the volume should be recalculated.
+
+    Returns:
+        list[float]: The recalculated volume differences
+    """
+
     file_identifiers = ['pcl' + strip_filename_timestamp(path.name)[0].strip('rosbag2') for path in bags]
     glob_results = [glob(f'{data_path}/{identifier}*') for identifier in file_identifiers]
 
@@ -250,7 +271,7 @@ def recalculate_volumes(bags):
     processing_settings = {'dist_threshold':        0.0006,       # Distance to filter grinded area. do not go near #50-80 micron on line axis, 200 micron on feed axis of rate 30 second
                             'cluster_neighbor':      20,           # filter outlier with #of neighbour point threshold
                             'plate_thickness':       0.0023,       # in m
-                            'plane_error_allowance': 5,            #in degree
+                            'plane_error_allowance': 5,            #in degrees
                             'clusterscan_eps':       0.00025,      # cluster minimum dist grouping in m
                             'laserline_threshold':   0.00008,      # scan resolution line axis in m
                             'feedaxis_threshold':    0.00012,      # scan resolution robot feed axis in m
@@ -285,10 +306,22 @@ def recalculate_volumes(bags):
         
 
 if __name__ == '__main__':
+
+    # Flag to recalculate lost volumes with the current iteration of the volume calculation
+    # The stored pointclouds are used and re-processed
+    # Note that this may not work depending on the active branch of pcl_processing_ros2.
+    # It works on branch volume_recalculation, but this may not be the latest method for calculating the volumes.
+
     REPROCESS_PCLS = False 
+
+    # Path to the file to be processed
     data_path = Path('/workspaces/brightsky_project/src/data_gathering/data/test_data') 
+
+    # An identifier for the files that have to be processed 
     test_identifiers = ['volfix_cont']
+
     bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
+    
     if REPROCESS_PCLS:
         recalc_volumes = recalculate_volumes(bags)
         

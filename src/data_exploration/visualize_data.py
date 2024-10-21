@@ -1,7 +1,6 @@
 import numpy as np 
 import matplotlib.pyplot as plt 
 import pandas as pd 
-import pathlib
 import matplotlib.colors as mcolors
 import copy
 
