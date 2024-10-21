@@ -1,6 +1,9 @@
 from pathlib import Path
 import numpy as np
 import copy
+from glob import glob 
+
+import open3d as o3d
 
 from rosbags.rosbag2 import Reader
 from rosbags.serde import deserialize_cdr
@@ -12,6 +15,8 @@ from stamped_std_msgs.msg import Float32Stamped, Int32Stamped, TimeSync
 from ferrobotics_acf.msg import ACFTelemStamped, ACFTelem
 from data_gathering_msgs.msg import BeltWearHistory
 from std_msgs.msg import String
+
+from pcl_processing_ros2 import PCLfunctions
 
 """
 The following script processes the rosbag time data into a .csv table which contains for every timestep:
@@ -84,7 +89,7 @@ def strip_filename_timestamp(name):
     return stripped_name, stamp 
 
 
-def convert_bag(bagpath):
+def convert_bag(bagpath, precomputed_volume_loss = None):
     # Relative path to the definition of each custom message type 
     msg_paths = [Path('src/stamped_std_msgs/msg/Float32Stamped.msg'),
                 Path('src/stamped_std_msgs/msg/Int32Stamped.msg'),
@@ -163,7 +168,7 @@ def convert_bag(bagpath):
     
     failure_topic = topic_dict.pop('/test_failure')
     if failure_topic['array'].size > 0:
-        failure_msg = failure_topic['array'][0].replace(',', '-').replace('\n', '__')
+        failure_msg = '__'.join([failure_topic['array'][i].replace(',', '-').replace('\n', '__') for i in range(failure_topic['array'].size)])
     else:
         failure_msg = ''
 
@@ -191,9 +196,13 @@ def convert_bag(bagpath):
     print(f"Number of timestamps: {len(unique_timestamps)} - ranging {unique_timestamps[-1]/10**9:.2f} seconds")
 
     # Extract single value messages
-    grinded_volume_topic = topic_dict.pop('/scanner/volume')      
-    grinded_volume = grinded_volume_topic['array'][0, 1]
-    print(f'Removed_volume {grinded_volume:.3f}')
+    grinded_volume_topic = topic_dict.pop('/scanner/volume')   
+    if precomputed_volume_loss is None:   
+        grinded_volume = grinded_volume_topic['array'][0, 1]
+        print(f'Removed_volume {grinded_volume:.3f}')
+    else:
+        grinded_volume = precomputed_volume_loss
+        print(f'Removed volume precomputed: {grinded_volume:.3f}')
 
     # results = f'th{plate_thickness}_d{removed_material_depth}'
     results = f'v{grinded_volume}_w{wear}'
@@ -231,19 +240,71 @@ def convert_bag(bagpath):
             entry = [timestamp] + [value for key in keys_sorted for value in entries[key]] + [failure_msg]
             f.write(','.join([str(value) for value in entry]) + '\n')
             
+            
+def recalculate_volumes(bags):
+    file_identifiers = ['pcl' + strip_filename_timestamp(path.name)[0].strip('rosbag2') for path in bags]
+    glob_results = [glob(f'{data_path}/{identifier}*') for identifier in file_identifiers]
+
+
+    # Copy pasted from the launch file 
+    processing_settings = {'dist_threshold':        0.0006,       # Distance to filter grinded area. do not go near #50-80 micron on line axis, 200 micron on feed axis of rate 30 second
+                            'cluster_neighbor':      20,           # filter outlier with #of neighbour point threshold
+                            'plate_thickness':       0.0023,       # in m
+                            'plane_error_allowance': 5,            #in degree
+                            'clusterscan_eps':       0.00025,      # cluster minimum dist grouping in m
+                            'laserline_threshold':   0.00008,      # scan resolution line axis in m
+                            'feedaxis_threshold':    0.00012,      # scan resolution robot feed axis in m
+                            'concave_resolution':    0.0005,       #concave hull resolution
+                            'filter_down_size':      0.0002,       #voxel down size on clustering
+                            'belt_width_threshold':  0.020,        #minimum detected belt width in m 
+        }
+    
+    pcl_func = PCLfunctions()
+
+    pcl_volumes = []
+    lost_volume = None 
+    for glob_result in glob_results:
+        if len(glob_result) > 0:
+            pcl_folder = glob_result[0]
+            pcl1_path, pcl2_path = Path(pcl_folder) / 'pre_grind_pointcloud.ply', Path(pcl_folder) / 'post_grind_pointcloud.ply'
+            pcl1, pcl2 = o3d.io.read_point_cloud(str(pcl1_path)), o3d.io.read_point_cloud(str(pcl2_path))
+            result = pcl_func.calculate_volume_difference(pcl1, pcl2, plate_thickness=2/1000, settings=processing_settings, logger=None)
+            if result is not None:
+                lost_volume, changed_pcl_global, hull_cloud_global = result 
+                # Convert to mm3
+                lost_volume *= 1000**3
+            else:
+                lost_volume = 0.0
+        else:
+            lost_volume = None 
+        
+        print(f'\n\nLost volume for bag {glob_result}: \n{lost_volume}\n')
+        pcl_volumes.append(lost_volume)
+    
+    return pcl_volumes
+        
 
 if __name__ == '__main__':
-
+    REPROCESS_PCLS = False 
     data_path = Path('/workspaces/brightsky_project/src/data_gathering/data/test_data') 
-    test_identifiers = ['data_gathering']
+    test_identifiers = ['volfix_cont']
     bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
-
-    # plate_thickness         = ...           # in mm
-    # removed_material_depth  = ...        # in mm
-    for bag in bags:
-        try:
-            convert_bag(bag)
-        except Exception as e:
-            print(f'Error: {e}')
-            print(f'Skipping bag {bag}')
-            continue 
+    if REPROCESS_PCLS:
+        recalc_volumes = recalculate_volumes(bags)
+        
+    if not REPROCESS_PCLS:
+        for bag in bags:
+            try:
+                convert_bag(bag)
+            except Exception as e:
+                print(f'Error: {e}')
+                print(f'Skipping bag {bag}')
+                continue 
+    else:
+        for bag, volume in zip(bags, recalc_volumes):
+            try:
+                convert_bag(bag, volume)
+            except Exception as e:
+                print(f'Error: {e}')
+                print(f'Skipping bag {bag}')
+                continue 

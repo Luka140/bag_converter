@@ -86,10 +86,10 @@ if __name__ == '__main__':
 
 
     # The .csv which containts the 'database' to add to, on which a model will be trained
-    copmiled_data_file_name = 'data_gathering.csv'
+    copmiled_data_file_name = 'datapoints_post_volume_fix.csv'
     data_collection_path = pathlib.Path('data_compilation') / copmiled_data_file_name
     csv_folder_path = pathlib.Path('csv_bags')
-    test_identifiers = ['data_gathering']
+    test_identifiers = ['volfix']
 
     # The .csv rosbag from which data should be extracted 
     # filename = 'rosbag2_2024-08-16_13:56:28_sample0.1__f3_rpm8000_grit60_t10.0_th0.0_d5.0.csv'
@@ -105,5 +105,5 @@ if __name__ == '__main__':
     for filename in filenames:
         try:
             compile_data_from_csv_bag(filename, str(csv_folder_path), data_collection_path, force_threshold)
-        except UserWarning:
+        except UserWarning as e:
             pass 
