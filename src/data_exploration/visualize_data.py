@@ -31,6 +31,11 @@ def plot_time_removal(filtered_data: pd.DataFrame):
     for i, ((force, rpm), group) in enumerate(grouped_df):
         if group.shape[0] < 3:
             continue 
+        
+        # Filter out groups where the wear values are far apart
+        if group['initial_wear'].std() > 0.3 * group['initial_wear'].max():
+            continue
+
         print(f"Force Setpoint: {force}, RPM Setpoint: {rpm}")
         print(group)
         print("\n")
@@ -78,9 +83,8 @@ def plot_wear_relation(data: pd.DataFrame):
 if __name__ == '__main__':
 
     data = load_filter_data('data_compilation/datapoints_post_volume_fix.csv')
-    # plot_time_removal(data)
+    plot_time_removal(data)
 
     wear_data = pd.read_csv('data_compilation/datapoints_weartestV3.csv')
     # plot_full_wear_data(wear_data)
-
-    plot_wear_relation(wear_data)
+    # plot_wear_relation(wear_data)
