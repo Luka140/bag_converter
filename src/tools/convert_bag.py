@@ -10,10 +10,10 @@ from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 
 from stamped_std_msgs.msg import Float32Stamped, Int32Stamped, TimeSync
 from ferrobotics_acf.msg import ACFTelemStamped, ACFTelem
-from data_gathering_msgs.msg import BeltWearHistory
+from data_gathering_msgs.msg import BeltWearHistory, GrindArea
 from std_msgs.msg import String
 
-from pcl_processing_ros2 import PCLfunctions
+
 
 """
 The following script processes the rosbag time data into a .csv table which contains for every timestep:
@@ -76,6 +76,9 @@ def process_belt_wear_history(msg: BeltWearHistory):
 def process_string_msg(msg: String):
     return str(msg.data)
 
+def process_grind_area(msg: GrindArea):
+    return msg.belt_width, msg.plate_thickness
+
 def strip_filename_timestamp(name):
     parts = name.split('__')
     settings = parts.pop(-1)
@@ -87,7 +90,7 @@ def strip_filename_timestamp(name):
     return stripped_name, stamp 
 
 
-def convert_bag(bagpath, precomputed_volume_loss = None):
+def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None):
     """Converts a rosbag file to a csv.
     This function processes the rosbag time data into a .csv table which contains for every timestep:
         - Force setpoint
@@ -128,6 +131,9 @@ def convert_bag(bagpath, precomputed_volume_loss = None):
                         'column_headers': ['removed_volume'],
                         'timetype': 'ros'}
     wear_dict           = {'parser': process_belt_wear_history, 'timetype': 'ros'}
+    area_dict           = {'parser': process_grind_area,
+                           'column_headers': ['grind_area'],
+                           'timetype': 'ros'}
     failure_flag_dict   = {'parser': process_string_msg,
                            'column_headers': ['failure_msg'],
                            'timetype': 'ros'}
@@ -140,7 +146,8 @@ def convert_bag(bagpath, precomputed_volume_loss = None):
                     '/timesync': timesync_dict,
                     '/scanner/volume': volume_dict,
                     '/belt_wear_history': wear_dict,
-                    '/test_failure': failure_flag_dict}                             
+                    '/test_failure': failure_flag_dict,
+                    '/grind_area': area_dict}                             
 
     # Load message types from the standard database and add the custom message types
     add_types = {}
@@ -155,8 +162,15 @@ def convert_bag(bagpath, precomputed_volume_loss = None):
     with AnyReader([bagpath], default_typestore=typestore) as reader:
         for topic in topic_dict.keys():
             process_func = topic_dict[topic]['parser']
+
+            # Pre-load an array into the dict in case the topic has no connections 
+            topic_dict[topic]['array'] = np.array([])
             processed_msgs = [] 
             connections = [x for x in reader.connections if x.topic == topic]
+
+            if len(connections) < 1:
+                continue
+
             for connection, timestamp, rawdata in reader.messages(connections=connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 processed_msgs.append(process_func(msg))
@@ -171,6 +185,9 @@ def convert_bag(bagpath, precomputed_volume_loss = None):
         print('Bag does not contain belt wear --skipping')
         return
     
+    if topic_dict['/grind_area']['array'].size < 1 and overwrite_area is None:
+        print("The bag does not contain grinded area messages, and overwrite_area is None --skipping")
+    
     # Extract the timestamps from the 'TimeSync' messages
     rostime_offset, plctime_offset = topic_dict.pop('/timesync')['array'][0,:]                                        
     # print(f'ROS time at first match: {rostime_offset} ns\nPLC time at first match: {plctime_offset} ns\n')
@@ -184,6 +201,12 @@ def convert_bag(bagpath, precomputed_volume_loss = None):
     else:
         failure_msg = ''
 
+    area_topic = topic_dict.pop('/grind_area')
+    if area_topic['array'].size > 0:
+        # Multiply belt width and thickness converted from meters to mm
+        area = area_topic['array'][0,0] * 1000 * area_topic['array'][0,1] * 1000
+    else:
+        area = overwrite_area
 
     # Synchronize the timestamps for all topics
     for key in topic_dict.keys():
@@ -217,7 +240,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None):
         print(f'Removed volume precomputed: {grinded_volume:.3f}')
 
     # results = f'th{plate_thickness}_d{removed_material_depth}'
-    results = f'v{grinded_volume}_w{wear}'
+    results = f'v{grinded_volume}_w{wear}_a{area}'
     filename_stripped, filename_timestamp = strip_filename_timestamp(bagpath.parts[-1])
     csv_filename = converted_bagpath / f'{filename_stripped}_{results}__{filename_timestamp}.csv'
 
@@ -268,16 +291,16 @@ def recalculate_volumes(bags: list[Path]) -> list[float]:
 
 
     # Copy pasted from the launch file 
-    processing_settings = {'dist_threshold':        0.0006,       # Distance to filter grinded area. do not go near #50-80 micron on line axis, 200 micron on feed axis of rate 30 second
+    processing_settings = {'dist_threshold':        0.0006,        # Distance to filter grinded area. do not go near #50-80 micron on line axis, 200 micron on feed axis of rate 30 second
                             'cluster_neighbor':      20,           # filter outlier with #of neighbour point threshold
                             'plate_thickness':       0.0023,       # in m
-                            'plane_error_allowance': 5,            #in degrees
+                            'plane_error_allowance': 5,            # in degrees
                             'clusterscan_eps':       0.00025,      # cluster minimum dist grouping in m
                             'laserline_threshold':   0.00008,      # scan resolution line axis in m
                             'feedaxis_threshold':    0.00012,      # scan resolution robot feed axis in m
-                            'concave_resolution':    0.0005,       #concave hull resolution
-                            'filter_down_size':      0.0002,       #voxel down size on clustering
-                            'belt_width_threshold':  0.020,        #minimum detected belt width in m 
+                            'concave_resolution':    0.0005,       # concave hull resolution
+                            'filter_down_size':      0.0002,       # voxel down size on clustering
+                            'belt_width_threshold':  0.8,          # minimum detected belt width in m 
         }
     
     pcl_func = PCLfunctions()
@@ -313,14 +336,19 @@ if __name__ == '__main__':
     # It works on branch volume_recalculation, but this may not be the latest method for calculating the volumes.
 
     REPROCESS_PCLS = False 
+    OVERWRITE_AREA = None # IN mm2
 
     # Path to the file to be processed
     data_path = Path('/workspaces/brightsky_project/src/data_gathering/data/test_data') 
 
     # An identifier for the files that have to be processed 
-    test_identifiers = ['volfix_cont']
+    test_identifiers = ['quadruple_plate_reset_new_belt']
 
     bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
+
+    if OVERWRITE_AREA is not None:
+        print(f'[WARNING]: OVERWRITE_AREA is set to {OVERWRITE_AREA}. Make sure this is intentional. If not, set it to None')
+
     
     if REPROCESS_PCLS:
         recalc_volumes = recalculate_volumes(bags)
@@ -328,7 +356,7 @@ if __name__ == '__main__':
     if not REPROCESS_PCLS:
         for bag in bags:
             try:
-                convert_bag(bag)
+                convert_bag(bag, overwrite_area=OVERWRITE_AREA)
             except Exception as e:
                 print(f'Error: {e}')
                 print(f'Skipping bag {bag}')
@@ -336,6 +364,7 @@ if __name__ == '__main__':
     else:
         for bag, volume in zip(bags, recalc_volumes):
             try:
+                from pcl_processing_ros2 import PCLfunctions # TODO moved this here because this is not acutally in the file on the main branch right now
                 convert_bag(bag, volume)
             except Exception as e:
                 print(f'Error: {e}')

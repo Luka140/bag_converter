@@ -31,7 +31,7 @@ def compile_data_from_csv_bag(filename, bag_csv_folder_path, compilation_path, c
     # thickness_plate         = float(parameter_list[4].strip('th'))
     grinded_volume          = float(parameter_list[4].strip('v'))
     wear                    = float(parameter_list[5].strip('w'))
-    # removed_material_depth  = float(parameter_list[5].strip('d'))
+    grind_area              = float(parameter_list[6].strip('a'))
 
     assert ('f'     in parameter_list[0] and
             'rpm'   in parameter_list[1] and
@@ -39,7 +39,9 @@ def compile_data_from_csv_bag(filename, bag_csv_folder_path, compilation_path, c
             't'     in parameter_list[3] and
             # 'th'    in parameter_list[4] and
             'v'     in parameter_list[4] and 
-            'w'     in parameter_list[5]), 'The order or labelling of the data in the filename seems to have changed - adjust the script accordingly'
+            'w'     in parameter_list[5] and
+            'a'     in parameter_list[6]
+            ), 'The order or labelling of the data in the filename seems to have changed - adjust the script accordingly'
 
 
     if not os.path.isfile(compilation_path):
@@ -72,8 +74,8 @@ def compile_data_from_csv_bag(filename, bag_csv_folder_path, compilation_path, c
     failure_msg = active_data_points['failure_msg'].iloc[0]
 
 
-    entries = [grind_time_s, avg_rpm, mean_absolute_deviation_rpm, avg_force, mean_absolute_deviation_force, avg_position, mean_absolute_deviation_position, grit, grinded_volume, wear, force_setpoint, rpm_setpoint, grind_time_setpoint, failure_msg]
-    headers = ['grind_time', 'avg_rpm', 'mad_rpm', 'avg_force', 'mad_force', 'avg_position', 'mad_position', 'grit', 'removed_material', 'initial_wear', 'force_setpoint', 'rpm_setpoint', 'grind_time_setpoint', 'failure_msg']
+    entries = [grind_time_s, avg_rpm, mean_absolute_deviation_rpm, avg_force, mean_absolute_deviation_force, avg_position, mean_absolute_deviation_position, grit, grinded_volume, grind_area, wear, force_setpoint, rpm_setpoint, grind_time_setpoint, failure_msg]
+    headers = ['grind_time', 'avg_rpm', 'mad_rpm', 'avg_force', 'mad_force', 'avg_position', 'mad_position', 'grit', 'removed_material', 'grind_area', 'initial_wear', 'force_setpoint', 'rpm_setpoint', 'grind_time_setpoint', 'failure_msg']
 
     with open(compilation_path, 'r+') as f:
         current_data = [line for line in f.readlines()]
@@ -86,10 +88,10 @@ if __name__ == '__main__':
 
 
     # The .csv which containts the 'database' to add to, on which a model will be trained
-    copmiled_data_file_name = 'datapoints_post_volume_fix.csv'
-    data_collection_path = pathlib.Path('data_compilation') / copmiled_data_file_name
+    compiled_data_file_name = 'quadruple_plate.csv'
+    data_collection_path = pathlib.Path('data_compilation') / compiled_data_file_name
     csv_folder_path = pathlib.Path('csv_bags')
-    test_identifiers = ['volfix']
+    test_identifiers = ['quadruple_plate_reset_new_belt']
 
     # The .csv rosbag from which data should be extracted 
     # filename = 'rosbag2_2024-08-16_13:56:28_sample0.1__f3_rpm8000_grit60_t10.0_th0.0_d5.0.csv'
