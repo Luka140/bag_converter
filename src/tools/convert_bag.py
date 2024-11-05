@@ -70,7 +70,7 @@ def process_timesync(msg: TimeSync):
     return t_ros, t_plc
 
 def process_belt_wear_history(msg: BeltWearHistory):
-    forces, rpms, contact_times = np.array(msg.force), np.array(msg.rpm), np.array(msg.contact_time)
+    forces, rpms, contact_times, areas = np.array(msg.force), np.array(msg.rpm), np.array(msg.contact_time), np.array(msg.area)
     return np.sum(forces * contact_times * rpms)
 
 def process_string_msg(msg: String):
@@ -110,7 +110,8 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None):
                 Path('src/stamped_std_msgs/msg/Int32Stamped.msg'),
                 Path('src/stamped_std_msgs/msg/TimeSync.msg'),
                 Path('src/ferrobotics_acf/msg/ACFTelem.msg'),
-                Path('src/ferrobotics_acf/msg/ACFTelemStamped.msg')]
+                Path('src/ferrobotics_acf/msg/ACFTelemStamped.msg'),
+                Path('src/data_gathering_msgs/msg/BeltWearHistory.msg')]
 
     # Create a dict for each topic. Entries should be
         # 'parser': a function that parses the msg type and returns a tuple in order (timestamp, d1, d2, d3) where dn are extracted data fields
@@ -133,7 +134,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None):
     wear_dict           = {'parser': process_belt_wear_history, 'timetype': 'ros'}
     area_dict           = {'parser': process_grind_area,
                            'column_headers': ['grind_area'],
-                           'timetype': 'ros'}
+                           'timetype': 'ros'}    
     failure_flag_dict   = {'parser': process_string_msg,
                            'column_headers': ['failure_msg'],
                            'timetype': 'ros'}
@@ -342,7 +343,7 @@ if __name__ == '__main__':
     data_path = Path('/workspaces/brightsky_project/src/data_gathering/data/test_data') 
 
     # An identifier for the files that have to be processed 
-    test_identifiers = ['quadruple_plate_reset_new_belt']
+    test_identifiers = ['quadruple']
 
     bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
 

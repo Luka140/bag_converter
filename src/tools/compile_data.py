@@ -83,15 +83,17 @@ def compile_data_from_csv_bag(filename, bag_csv_folder_path, compilation_path, c
             f.write(f"{','.join(headers)},source\n")
         f.write(f"{','.join([str(entry) for entry in entries])},{filename}\n")
 
+    print("Done")
+
 
 if __name__ == '__main__':
 
 
     # The .csv which containts the 'database' to add to, on which a model will be trained
-    compiled_data_file_name = 'quadruple_plate.csv'
+    compiled_data_file_name = 'dual_robot_stationary.csv'
     data_collection_path = pathlib.Path('data_compilation') / compiled_data_file_name
     csv_folder_path = pathlib.Path('csv_bags')
-    test_identifiers = ['quadruple_plate_reset_new_belt']
+    test_identifiers = ['dual_robot_stationary']
 
     # The .csv rosbag from which data should be extracted 
     # filename = 'rosbag2_2024-08-16_13:56:28_sample0.1__f3_rpm8000_grit60_t10.0_th0.0_d5.0.csv'
@@ -108,4 +110,5 @@ if __name__ == '__main__':
         try:
             compile_data_from_csv_bag(filename, str(csv_folder_path), data_collection_path, force_threshold)
         except UserWarning as e:
+            print(e)
             pass 
