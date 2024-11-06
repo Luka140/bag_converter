@@ -65,13 +65,29 @@ def process_timesync(msg: TimeSync):
         ros_header = msg.header2
         plc_header = msg.header1
         
-    t_ros = conv_time_ns(ros_header.stamp.sec, ros_header.stamp.nanosec) # rostime
+    t_ros = conv_time_ns(ros_header.stamp.sec, ros_header.stamp.nanosec) # rostimelist
     t_plc = conv_time_ns(plc_header.stamp.sec, plc_header.stamp.nanosec) # plctime
     return t_ros, t_plc
 
-def process_belt_wear_history(msg: BeltWearHistory):
-    forces, rpms, contact_times, areas = np.array(msg.force), np.array(msg.rpm), np.array(msg.contact_time), np.array(msg.area)
-    return np.sum(forces * contact_times * rpms)
+def process_belt_wear_history(msg: BeltWearHistory, OVERWRITE_AREA=None):
+    forces, rpms, contact_times = np.array(msg.force), np.array(msg.rpm), np.array(msg.contact_time)
+    print(f"\n\nentries: {forces.size} \n\n")
+
+    separator_idx = 11
+    init_areas = [area * 10**6 for area in list(msg.area)[:separator_idx]]
+    areas = np.ones_like(forces) * OVERWRITE_AREA 
+    areas[:separator_idx] = init_areas
+    
+
+
+    # try:
+        # areas = np.array(msg.area)
+    # except:
+        # if OVERWRITE_AREA is not None:
+            # areas = np.ones_like(forces) * OVERWRITE_AREA
+        # else:
+            # raise ValueError("Overwrite area not set, and the belt wear history does not contain area.")
+    return np.sum(forces * contact_times * rpms/(areas+1e-12))
 
 def process_string_msg(msg: String):
     return str(msg.data)
@@ -174,7 +190,10 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None):
 
             for connection, timestamp, rawdata in reader.messages(connections=connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
-                processed_msgs.append(process_func(msg))
+                if "belt_wear_history" in topic and overwrite_area is not None:
+                    processed_msgs.append(process_func(msg, overwrite_area))
+                else:
+                    processed_msgs.append(process_func(msg))
             
             topic_dict[topic]['array'] = np.array(processed_msgs)
 
@@ -337,15 +356,17 @@ if __name__ == '__main__':
     # It works on branch volume_recalculation, but this may not be the latest method for calculating the volumes.
 
     REPROCESS_PCLS = False 
-    OVERWRITE_AREA = None # IN mm2
+    OVERWRITE_AREA = 50 # IN mm2
 
     # Path to the file to be processed
-    data_path = Path('/workspaces/brightsky_project/src/data_gathering/data/test_data') 
+    data_path = Path('/workspaces/BrightSkyRepoLinux/bag_history') 
 
     # An identifier for the files that have to be processed 
-    test_identifiers = ['quadruple']
+    test_identifiers = ['corner']
+    exluded_identifiers = ['redo']
+    # test_identifiers = ['rosbag2__samplecorner_grind_initial_2__f4.0_rpm11000.0_grit120_t10.0']
 
-    bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
+    bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) and excluded_identifier not in str(path) for identifier, excluded_identifier in zip(test_identifiers, exluded_identifiers)])]
 
     if OVERWRITE_AREA is not None:
         print(f'[WARNING]: OVERWRITE_AREA is set to {OVERWRITE_AREA}. Make sure this is intentional. If not, set it to None')
