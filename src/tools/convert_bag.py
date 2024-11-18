@@ -90,7 +90,7 @@ def strip_filename_timestamp(name):
     return stripped_name, stamp 
 
 
-def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None):
+def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, output_folder=None):
     """Converts a rosbag file to a csv.
     This function processes the rosbag time data into a .csv table which contains for every timestep:
         - Force setpoint
@@ -155,8 +155,8 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None):
     [add_types.update(get_types_from_msg(msg_path.read_text(), path_to_type(msg_path))) for msg_path in msg_paths]
     typestore = get_typestore(Stores.ROS2_HUMBLE)
     typestore.register(add_types)
-
-    converted_bagpath = Path('csv_bags')
+    
+    output_folder = Path('csv_bags')
     
     # Read all messages and parse them according to the 'parser' in topic_dict
     # Stores the messages for each respective topic in an np.ndarray located in topic_dict['topic_name']['array']
@@ -243,7 +243,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None):
     # results = f'th{plate_thickness}_d{removed_material_depth}'
     results = f'v{grinded_volume}_w{wear}_a{area}'
     filename_stripped, filename_timestamp = strip_filename_timestamp(bagpath.parts[-1])
-    csv_filename = converted_bagpath / f'{filename_stripped}_{results}__{filename_timestamp}.csv'
+    csv_filename = output_folder / f'{filename_stripped}_{results}__{filename_timestamp}.csv'
 
     # similar_result_files = [path for path in converted_bagpath.iterdir() if results in str(path.name)]
     # if len(similar_result_files) > 0:
@@ -343,7 +343,7 @@ if __name__ == '__main__':
     data_path = Path('/workspaces/brightsky_project/src/data_gathering/data/test_data') 
 
     # An identifier for the files that have to be processed 
-    test_identifiers = ['quadruple']
+    test_identifiers = ['dual_robot_stationary_redo']
 
     bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
 
