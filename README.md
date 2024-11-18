@@ -26,4 +26,6 @@ To expand or adjust the functionality of these scripts to different topics, the 
     - 'column_headers': A list of headers which should be present in the csv for this topic, corresponding to the entries in the tuple.
     - 'timetype': Either 'ros' or 'plc', depending on whether the timestamp on the message originates from ROS or the PLC. 
 - Add 'topic': `dict` to the `topic_dict`, where `dict` is the dictionary created in the previous step.
+
+Note that some single-valued information which therefore does not fit into a csv well, such as resulting removed material, is communicated between the rosbag, `convert_bag.py`, and `compile_data.py` through the filename. If the naming scheme changes, this should be adjusted into the scripts as well. 
   
