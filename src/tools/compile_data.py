@@ -9,9 +9,12 @@ The following test settings are inferred from the filename, which should be gene
     - force_setpoint        
     - rpm_setpoint          
     - grit                  
-    - grind_time_setpoint   
+    - feed_rate_setpoint
+    - num_pass_setpoint   
     - thickness_plate       
     - removed_material_depth
+    - belt_width
+    - pass_motion_length
 
 The following data is extracted from the rosbag csv:
     - grind_time
@@ -27,20 +30,26 @@ def compile_data_from_csv_bag(filename, bag_csv_folder_path, compilation_path, c
     force_setpoint          = float(parameter_list[0].strip('f'))
     rpm_setpoint            = float(parameter_list[1].strip('rpm'))
     grit                    = float(parameter_list[2].strip('grit'))
-    grind_time_setpoint     = float(parameter_list[3].strip('t'))
-    # thickness_plate         = float(parameter_list[4].strip('th'))
-    grinded_volume          = float(parameter_list[4].strip('v'))
-    wear                    = float(parameter_list[5].strip('w'))
-    grind_area              = float(parameter_list[6].strip('a'))
+    feed_rate_setpoint      = float(parameter_list[3].strip('fr'))
+    num_pass_setpoint       = float(parameter_list[4].strip('np'))
+    pass_motion_length      = float(parameter_list[5].strip('pml'))
+    # thickness_plate         = float(parameter_list[6].strip('th'))
+    grinded_volume          = float(parameter_list[6].strip('v'))
+    wear                    = float(parameter_list[7].strip('w'))
+    grind_area              = float(parameter_list[8].strip('a'))
+    fact_grind_time         = float(parameter_list[9].strip('ft'))
 
     assert ('f'     in parameter_list[0] and
             'rpm'   in parameter_list[1] and
             'grit'  in parameter_list[2] and
-            't'     in parameter_list[3] and
-            # 'th'    in parameter_list[4] and
-            'v'     in parameter_list[4] and 
-            'w'     in parameter_list[5] and
-            'a'     in parameter_list[6]
+            'fr'    in parameter_list[3] and
+            'np'    in parameter_list[4] and
+            'pml'   in parameter_list[5] and
+            # 'th'    in parameter_list[6] and
+            'v'     in parameter_list[6] and 
+            'w'     in parameter_list[7] and
+            'a'     in parameter_list[8] and
+            'ft'    in parameter_list[9]
             ), 'The order or labelling of the data in the filename seems to have changed - adjust the script accordingly'
 
 
@@ -90,10 +99,10 @@ if __name__ == '__main__':
 
 
     # The .csv which containts the 'database' to add to, on which a model will be trained
-    compiled_data_file_name = 'dual_robot_stationary_redo.csv'
+    compiled_data_file_name = 'moving_grinder_robot.csv'
     data_collection_path = pathlib.Path('data_compilation') / compiled_data_file_name
     csv_folder_path = pathlib.Path('csv_bags')
-    test_identifiers = ['dual_robot_stationary_redo']
+    test_identifiers = ['moving_grinder_robot']
 
     # The .csv rosbag from which data should be extracted 
     # filename = 'rosbag2_2024-08-16_13:56:28_sample0.1__f3_rpm8000_grit60_t10.0_th0.0_d5.0.csv'

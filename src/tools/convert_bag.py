@@ -138,7 +138,16 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     failure_flag_dict   = {'parser': process_string_msg,
                            'column_headers': ['failure_msg'],
                            'timetype': 'ros'}
-
+    #added topics parsing for moving grinder
+    feed_rate_dict   = {'parser': process_int_float_stamped,
+                           'column_headers': ['feed_rate'],
+                           'timetype': 'ros'}
+    num_pass_dict   = {'parser': process_int_float_stamped,
+                           'column_headers': ['num_pass'],
+                           'timetype': 'ros'}
+    pass_length_dict   = {'parser': process_int_float_stamped,
+                           'column_headers': ['pass_length'],
+                           'timetype': 'ros'}
 
     # Top level dict that correlates the topic names with their respective dict
     topic_dict      = {'/grinder/rpm': rpm_dict,  
@@ -148,14 +157,17 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
                     '/scanner/volume': volume_dict,
                     '/belt_wear_history': wear_dict,
                     '/test_failure': failure_flag_dict,
-                    '/grind_area': area_dict}                             
+                    '/grind_area': area_dict,
+                    #added topics for moving grinder
+                    '/feed_rate': feed_rate_dict,
+                    '/num_pass': num_pass_dict,
+                    '/pass_length': pass_length_dict}                             
 
     # Load message types from the standard database and add the custom message types
     add_types = {}
     [add_types.update(get_types_from_msg(msg_path.read_text(), path_to_type(msg_path))) for msg_path in msg_paths]
     typestore = get_typestore(Stores.ROS2_HUMBLE)
     typestore.register(add_types)
-    
     output_folder = Path('csv_bags')
     
     # Read all messages and parse them according to the 'parser' in topic_dict
@@ -206,8 +218,11 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     if area_topic['array'].size > 0:
         # Multiply belt width and thickness converted from meters to mm
         area = area_topic['array'][0,0] * 1000 * area_topic['array'][0,1] * 1000
+        # get belt width value in mm
+        belt_width = area_topic['array'][0,0] * 1000
     else:
         area = overwrite_area
+        belt_width = 25.00                 #currently hard coded
 
     # Synchronize the timestamps for all topics
     for key in topic_dict.keys():
@@ -240,8 +255,17 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         grinded_volume = precomputed_volume_loss
         print(f'Removed volume precomputed: {grinded_volume:.3f}')
 
+    #Compute factored grind time & material removal
+    feed_rate_topic = topic_dict.pop('/feed_rate')
+    num_pass_topic = topic_dict.pop('/num_pass')
+    pass_length_topic = topic_dict.pop('/pass_length')
+    fact_grind_time = num_pass_topic['array'][:, 1] * belt_width / feed_rate_topic['array'][:, 1]
+    fact_volume = grinded_volume * belt_width / pass_length_topic['array'][:, 1]
+
+
+
     # results = f'th{plate_thickness}_d{removed_material_depth}'
-    results = f'v{grinded_volume}_w{wear}_a{area}'
+    results = f'v{grinded_volume:.3f}_w{wear:.1f}_a{area:.2f}_bw{belt_width:.2f}_fv{fact_volume:.3f}_ft{fact_grind_time:.2f}'
     filename_stripped, filename_timestamp = strip_filename_timestamp(bagpath.parts[-1])
     csv_filename = output_folder / f'{filename_stripped}_{results}__{filename_timestamp}.csv'
 
@@ -340,10 +364,10 @@ if __name__ == '__main__':
     OVERWRITE_AREA = None # IN mm2
 
     # Path to the file to be processed
-    data_path = Path('/workspaces/brightsky_project/src/data_gathering/data/test_data') 
+    data_path = Path('/workspaces/BrightSkyRepoLinux/Test_data/') 
 
     # An identifier for the files that have to be processed 
-    test_identifiers = ['dual_robot_stationary_redo']
+    test_identifiers = ['sampledual']
 
     bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
 
