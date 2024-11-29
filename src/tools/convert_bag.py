@@ -209,9 +209,9 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     rostime_offset, plctime_offset = topic_dict.pop('/timesync')['array'][0,:]                                        
     # print(f'ROS time at first match: {rostime_offset} ns\nPLC time at first match: {plctime_offset} ns\n')
 
-    #wear_topic = topic_dict.pop('/belt_wear_history')
-    #wear = wear_topic['array'][0]
-    wear = float(100000.0)
+    wear_topic = topic_dict.pop('/belt_wear_history')
+    wear = wear_topic['array'][0]
+
 
     failure_topic = topic_dict.pop('/test_failure')
     if failure_topic['array'].size > 0:
@@ -228,7 +228,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     else:
         area = overwrite_area
         belt_width = 25.00                 #currently hard coded
-    '''
+    
     # Synchronize the timestamps for all topics
     for key in topic_dict.keys():
         time_type = topic_dict[key]['timetype']
@@ -251,7 +251,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     unique_timestamp_set = timestamp_sets[0].union(*timestamp_sets[1:])
     unique_timestamps = sorted(list(unique_timestamp_set))
     print(f"Number of timestamps: {len(unique_timestamps)} - ranging {unique_timestamps[-1]/10**9:.2f} seconds")
-    '''
+    
     # Extract single value messages
     grinded_volume_topic = topic_dict.pop('/scanner/volume')   
     if precomputed_volume_loss is None:   
@@ -369,7 +369,7 @@ if __name__ == '__main__':
     OVERWRITE_AREA = None # IN mm2
 
     # Path to the file to be processed
-    data_path = Path('/workspaces/BrightSkyRepoLinux/') 
+    data_path = Path('/workspaces/BrightSkyRepoLinux/Test_data') 
 
     # An identifier for the files that have to be processed 
     test_identifiers = ['']
