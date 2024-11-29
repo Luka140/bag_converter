@@ -172,15 +172,15 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     
     # Read all messages and parse them according to the 'parser' in topic_dict
     # Stores the messages for each respective topic in an np.ndarray located in topic_dict['topic_name']['array']
+
     with AnyReader([bagpath], default_typestore=typestore) as reader:
         for topic in topic_dict.keys():
             process_func = topic_dict[topic]['parser']
-
             # Pre-load an array into the dict in case the topic has no connections 
             topic_dict[topic]['array'] = np.array([])
             processed_msgs = [] 
             connections = [x for x in reader.connections if x.topic == topic]
-
+            
             if len(connections) < 1:
                 continue
 
@@ -191,13 +191,12 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
                 except Exception as e:
                     print(f"Error processing topic {topic} at timestamp {timestamp}: {e}")
                     continue
-
             topic_dict[topic]['array'] = np.array(processed_msgs)
 
     if topic_dict['/scanner/volume']['array'].size < 1:
         print('Bag does not contain grinded volume --skipping')
         return
-    
+
     if topic_dict['/belt_wear_history']['array'].size < 1:
         print('Bag does not contain belt wear --not skipping')
 
@@ -206,6 +205,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         print("The bag does not contain grinded area messages, and overwrite_area is None --skipping")
     
     # Extract the timestamps from the 'TimeSync' messages
+    
     rostime_offset, plctime_offset = topic_dict.pop('/timesync')['array'][0,:]                                        
     # print(f'ROS time at first match: {rostime_offset} ns\nPLC time at first match: {plctime_offset} ns\n')
 
@@ -228,9 +228,15 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     else:
         area = overwrite_area
         belt_width = 25.00                 #currently hard coded
-    
+
+    #Compute factored grind time & material removal
+    feed_rate_topic = topic_dict.pop('/feed_rate')
+    num_pass_topic = topic_dict.pop('/num_pass')
+    pass_length_topic = topic_dict.pop('/pass_length')
+
     # Synchronize the timestamps for all topics
     for key in topic_dict.keys():
+        print(key)
         time_type = topic_dict[key]['timetype']
         if 'plc' in time_type.lower():
             offset = plctime_offset
@@ -261,14 +267,11 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         grinded_volume = precomputed_volume_loss
         print(f'Removed volume precomputed: {grinded_volume:.3f}')
 
-    
-    #Compute factored grind time & material removal
-    feed_rate_topic = topic_dict.pop('/feed_rate')
-    num_pass_topic = topic_dict.pop('/num_pass')
-    pass_length_topic = topic_dict.pop('/pass_length')
+    #Compute Factored time and volume
     fact_grind_time = num_pass_topic['array'][0, 1] * belt_width / feed_rate_topic['array'][0, 1]
     fact_volume = grinded_volume * belt_width / pass_length_topic['array'][0, 1]
-    
+
+
     # results = f'th{plate_thickness}_d{removed_material_depth}'
     results = f'v{grinded_volume:.3f}_w{wear:.1f}_a{area:.2f}_bw{belt_width:.2f}_fv{fact_volume:.3f}_ft{fact_grind_time:.2f}'
     filename_stripped, filename_timestamp = strip_filename_timestamp(bagpath.parts[-1])
@@ -369,7 +372,7 @@ if __name__ == '__main__':
     OVERWRITE_AREA = None # IN mm2
 
     # Path to the file to be processed
-    data_path = Path('/workspaces/BrightSkyRepoLinux/Test_data') 
+    data_path = Path('/workspaces/BrightSkyRepoLinux/') 
 
     # An identifier for the files that have to be processed 
     test_identifiers = ['']
