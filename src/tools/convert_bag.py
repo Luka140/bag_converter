@@ -10,7 +10,7 @@ from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 
 from stamped_std_msgs.msg import Float32Stamped, Int32Stamped, TimeSync
 from ferrobotics_acf.msg import ACFTelemStamped, ACFTelem
-from data_gathering_msgs.msg import BeltWearHistory, GrindArea
+from data_gathering_msgs.msg import BeltWearHistory, GrindArea, GrindSettings
 from std_msgs.msg import String
 
 
@@ -79,6 +79,10 @@ def process_string_msg(msg: String):
 def process_grind_area(msg: GrindArea):
     return msg.belt_width, msg.plate_thickness
 
+
+def process_grind_settings(msg: GrindSettings):
+    return msg.tcp_speed, msg.passes, msg.contact_time
+
 def strip_filename_timestamp(name):
     parts = name.split('__')
     settings = parts.pop(-1)
@@ -111,7 +115,8 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
                 Path('src/stamped_std_msgs/msg/TimeSync.msg'),
                 Path('src/ferrobotics_acf/msg/ACFTelem.msg'),
                 Path('src/ferrobotics_acf/msg/ACFTelemStamped.msg'),
-                Path('src/data_gathering_msgs/msg/BeltWearHistory.msg')]
+                Path('src/data_gathering_msgs/msg/BeltWearHistory.msg'),
+                Path('src/data_gathering_msgs/msg/GrindSettings.msg')]
 
     # Create a dict for each topic. Entries should be
         # 'parser': a function that parses the msg type and returns a tuple in order (timestamp, d1, d2, d3) where dn are extracted data fields
@@ -139,14 +144,8 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
                            'column_headers': ['failure_msg'],
                            'timetype': 'ros'}
     #added topics parsing for moving grinder
-    feed_rate_dict   = {'parser': process_int_float_stamped,
-                           'column_headers': ['feed_rate'],
-                           'timetype': 'ros'}
-    num_pass_dict   = {'parser': process_int_float_stamped,
-                           'column_headers': ['num_pass'],
-                           'timetype': 'ros'}
-    pass_length_dict   = {'parser': process_int_float_stamped,
-                           'column_headers': ['pass_length'],
+    grind_settings_dict   = {'parser': process_grind_settings,
+                           'column_headers': ['tcp_speed', 'num_pass', 'contact_time'],
                            'timetype': 'ros'}
 
     # Top level dict that correlates the topic names with their respective dict
@@ -159,9 +158,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
                     '/test_failure': failure_flag_dict,
                     '/grind_area': area_dict,
                     #added topics for moving grinder
-                    '/feed_rate': feed_rate_dict,
-                    '/num_pass': num_pass_dict,
-                    '/pass_length': pass_length_dict}                             
+                    '/grind_settings': grind_settings_dict}                             
 
     # Load message types from the standard database and add the custom message types
     add_types = {}
@@ -230,9 +227,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         belt_width = 25.00                 #currently hard coded
 
     #Compute factored grind time & material removal
-    feed_rate_topic = topic_dict.pop('/feed_rate')
-    num_pass_topic = topic_dict.pop('/num_pass')
-    pass_length_topic = topic_dict.pop('/pass_length')
+    grind_settings_topic = topic_dict.pop('/grind_settings')
 
     # Synchronize the timestamps for all topics
     for key in topic_dict.keys():
@@ -268,8 +263,9 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         print(f'Removed volume precomputed: {grinded_volume:.3f}')
 
     #Compute Factored time and volume
-    fact_grind_time = num_pass_topic['array'][0, 1] * belt_width / feed_rate_topic['array'][0, 1]
-    fact_volume = grinded_volume * belt_width / pass_length_topic['array'][0, 1]
+    calc_pass_length = grind_settings_topic['array'][0, 0] * grind_settings_topic['array'][0, 2] / grind_settings_topic['array'][0, 1]
+    fact_grind_time = grind_settings_topic['array'][0, 1] * belt_width / grind_settings_topic['array'][0, 0]
+    fact_volume = grinded_volume * belt_width / calc_pass_length
 
 
     # results = f'th{plate_thickness}_d{removed_material_depth}'
