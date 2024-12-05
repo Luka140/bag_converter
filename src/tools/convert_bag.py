@@ -265,12 +265,12 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     print(f"Number of timestamps: {len(unique_timestamps)} - ranging {unique_timestamps[-1]/10**9:.2f} seconds")
     
     #Compute Factored time and volume
-    calc_pass_length = grind_settings_topic['array'][0, 0] * grind_settings_topic['array'][0, 2] / grind_settings_topic['array'][0, 1]
-    fact_grind_time = grind_settings_topic['array'][0, 1] * belt_width / grind_settings_topic['array'][0, 0]
+    # calc_pass_length = grind_settings_topic['array'][0, 0] * grind_settings_topic['array'][0, 2] / grind_settings_topic['array'][0, 1]
+    # fact_grind_time = grind_settings_topic['array'][0, 1] * belt_width / grind_settings_topic['array'][0, 0]
 
 
     # results = f'th{plate_thickness}_d{removed_material_depth}'
-    results = f'v{grinded_volume:.3f}_w{wear:.1f}_a{area:.2f}_bw{belt_width:.2f}_ft{fact_grind_time:.2f}'
+    results = f'v{grinded_volume:.3f}_w{wear:.1f}_a{area:.2f}_bw{belt_width:.2f}'
     filename_stripped, filename_timestamp = strip_filename_timestamp(bagpath.parts[-1])
     csv_filename = output_folder / f'{filename_stripped}_{results}__{filename_timestamp}.csv'
 
@@ -369,10 +369,10 @@ if __name__ == '__main__':
     OVERWRITE_AREA = None # IN mm2
 
     # Path to the file to be processed
-    data_path = Path('/workspaces/BrightSkyRepoLinux/') 
+    data_path = Path('/workspaces/brightsky_project/src/data_gathering/data/test_data') 
 
     # An identifier for the files that have to be processed 
-    test_identifiers = ['samplemoving']
+    test_identifiers = ['moving_grind_lowered_rpmv2']
 
     bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
 
