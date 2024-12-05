@@ -33,12 +33,12 @@ def compile_data_from_csv_bag(filename, bag_csv_folder_path, compilation_path, c
     feed_rate_setpoint      = float(parameter_list[3].strip('fr'))
     num_pass_setpoint       = float(parameter_list[4].strip('np'))
     pass_length             = float(parameter_list[5].strip('pl'))
+    contact_time            = float(parameter_list[6].strip('ct'))
     # thickness_plate         = float(parameter_list[6].strip('th'))
-    grinded_volume          = float(parameter_list[6].strip('v'))
-    wear                    = float(parameter_list[7].strip('w'))
-    grind_area              = float(parameter_list[8].strip('a'))
-    belt_width              = float(parameter_list[9].strip('bw'))
-    fact_volume             = float(parameter_list[10].strip('fv'))
+    grinded_volume          = float(parameter_list[7].strip('v'))
+    wear                    = float(parameter_list[8].strip('w'))
+    grind_area              = float(parameter_list[9].strip('a'))
+    belt_width              = float(parameter_list[10].strip('bw'))
     fact_grind_time         = float(parameter_list[11].strip('ft'))
 
     assert ('f'     in parameter_list[0] and
@@ -46,13 +46,13 @@ def compile_data_from_csv_bag(filename, bag_csv_folder_path, compilation_path, c
             'grit'  in parameter_list[2] and
             'fr'    in parameter_list[3] and
             'np'    in parameter_list[4] and
-            'pl'   in parameter_list[5] and
+            'pl'    in parameter_list[5] and
+            'ct'    in parameter_list[6] and
             # 'th'    in parameter_list[6] and
-            'v'     in parameter_list[6] and 
-            'w'     in parameter_list[7] and
-            'a'     in parameter_list[8] and
-            'bw'    in parameter_list[9] and
-            'fv'    in parameter_list[10] and
+            'v'     in parameter_list[7] and 
+            'w'     in parameter_list[8] and
+            'a'     in parameter_list[9] and
+            'bw'    in parameter_list[10] and
             'ft'    in parameter_list[11]
             ), 'The order or labelling of the data in the filename seems to have changed - adjust the script accordingly'
 
@@ -83,12 +83,12 @@ def compile_data_from_csv_bag(filename, bag_csv_folder_path, compilation_path, c
     mean_absolute_deviation_force = abs(active_data_points['force'] - avg_force).mean()
     avg_position = active_data_points['position'].mean()
     mean_absolute_deviation_position = abs(active_data_points['position'] - avg_position).mean()
-    
+
     failure_msg = active_data_points['failure_msg'].iloc[0]
 
 
-    entries = [grind_time_s, avg_rpm, mean_absolute_deviation_rpm, avg_force, mean_absolute_deviation_force, avg_position, mean_absolute_deviation_position, grit, grinded_volume, fact_volume, fact_grind_time, grind_area, wear, force_setpoint, rpm_setpoint, feed_rate_setpoint, num_pass_setpoint, pass_length, failure_msg]
-    headers = ['grind_time', 'avg_rpm', 'mad_rpm', 'avg_force', 'mad_force', 'avg_position', 'mad_position', 'grit', 'removed_material', 'factored_removed_material', 'factored_grind_time', 'grind_area', 'initial_wear', 'force_setpoint', 'rpm_setpoint', 'feed_rate_setpoint', 'num_pass_setpoint','pass_length', 'failure_msg']
+    entries = [grind_time_s, avg_rpm, mean_absolute_deviation_rpm, avg_force, mean_absolute_deviation_force, avg_position, mean_absolute_deviation_position, grit, grinded_volume, fact_grind_time, grind_area, wear, force_setpoint, rpm_setpoint, feed_rate_setpoint, num_pass_setpoint, pass_length, contact_time, failure_msg]
+    headers = ['grind_time', 'avg_rpm', 'mad_rpm', 'avg_force', 'mad_force', 'avg_position', 'mad_position', 'grit', 'removed_material_mid', 'factored_grind_time', 'grind_area', 'initial_wear', 'force_setpoint', 'rpm_setpoint', 'feed_rate_setpoint', 'num_pass_setpoint','pass_length', 'contact_time', 'failure_msg']
 
     with open(compilation_path, 'r+') as f:
         current_data = [line for line in f.readlines()]
@@ -106,7 +106,7 @@ if __name__ == '__main__':
     compiled_data_file_name = 'moving_grinder_robot.csv'
     data_collection_path = pathlib.Path('data_compilation') / compiled_data_file_name
     csv_folder_path = pathlib.Path('csv_bags')
-    test_identifiers = ['']
+    test_identifiers = ['samplemoving']
 
     # The .csv rosbag from which data should be extracted 
     # filename = 'rosbag2_2024-08-16_13:56:28_sample0.1__f3_rpm8000_grit60_t10.0_th0.0_d5.0.csv'

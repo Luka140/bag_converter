@@ -109,6 +109,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         precomputed_volume_loss (list[float], optional): List of precomputed volumes which will overwrite the values in the rosbag messages if applicable.
 
     """
+    print('start converting')
     # Relative path to the definition of each custom message type 
     msg_paths = [Path('src/stamped_std_msgs/msg/Float32Stamped.msg'),
                 Path('src/stamped_std_msgs/msg/Int32Stamped.msg'),
@@ -116,6 +117,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
                 Path('src/ferrobotics_acf/msg/ACFTelem.msg'),
                 Path('src/ferrobotics_acf/msg/ACFTelemStamped.msg'),
                 Path('src/data_gathering_msgs/msg/BeltWearHistory.msg'),
+                Path('src/data_gathering_msgs/msg/GrindArea.msg'),
                 Path('src/data_gathering_msgs/msg/GrindSettings.msg')]
 
     # Create a dict for each topic. Entries should be
@@ -149,16 +151,16 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
                            'timetype': 'ros'}
 
     # Top level dict that correlates the topic names with their respective dict
-    topic_dict      = {'/grinder/rpm': rpm_dict,  
+    topic_dict      = {'/grinder_node/rpm': rpm_dict,  
                     '/acf/force': acf_force_dict,    
                     '/acf/telem': telem_dict,          
-                    '/timesync': timesync_dict,
-                    '/scanner/volume': volume_dict,
-                    '/belt_wear_history': wear_dict,
-                    '/test_failure': failure_flag_dict,
-                    '/grind_area': area_dict,
+                    '/grinder_node/timesync': timesync_dict,
+                    '/test_coordinator/volume': volume_dict,
+                    '/test_coordinator/belt_wear_history': wear_dict,
+                    '/test_coordinator/test_failure': failure_flag_dict,
+                    '/test_coordinator/grind_area': area_dict,
                     #added topics for moving grinder
-                    '/grind_settings': grind_settings_dict}                             
+                    '/rws_motion_client/grind_settings': grind_settings_dict}                             
 
     # Load message types from the standard database and add the custom message types
     add_types = {}
@@ -169,9 +171,10 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     
     # Read all messages and parse them according to the 'parser' in topic_dict
     # Stores the messages for each respective topic in an np.ndarray located in topic_dict['topic_name']['array']
-
+    print(f'Reading and Parsing messages: {bagpath}')
     with AnyReader([bagpath], default_typestore=typestore) as reader:
         for topic in topic_dict.keys():
+            print(f"Processing topic {topic}")
             process_func = topic_dict[topic]['parser']
             # Pre-load an array into the dict in case the topic has no connections 
             topic_dict[topic]['array'] = np.array([])
@@ -190,33 +193,33 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
                     continue
             topic_dict[topic]['array'] = np.array(processed_msgs)
 
-    if topic_dict['/scanner/volume']['array'].size < 1:
+    if topic_dict['/test_coordinator/volume']['array'].size < 1:
         print('Bag does not contain grinded volume --skipping')
         return
 
-    if topic_dict['/belt_wear_history']['array'].size < 1:
+    if topic_dict['/test_coordinator/belt_wear_history']['array'].size < 1:
         print('Bag does not contain belt wear --not skipping')
 
     
-    if topic_dict['/grind_area']['array'].size < 1 and overwrite_area is None:
+    if topic_dict['/test_coordinator/grind_area']['array'].size < 1 and overwrite_area is None:
         print("The bag does not contain grinded area messages, and overwrite_area is None --skipping")
     
     # Extract the timestamps from the 'TimeSync' messages
-    
-    rostime_offset, plctime_offset = topic_dict.pop('/timesync')['array'][0,:]                                        
+    print('finished reading, start processing')
+    rostime_offset, plctime_offset = topic_dict.pop('/grinder_node/timesync')['array'][0,:]                                        
     # print(f'ROS time at first match: {rostime_offset} ns\nPLC time at first match: {plctime_offset} ns\n')
 
-    wear_topic = topic_dict.pop('/belt_wear_history')
+    wear_topic = topic_dict.pop('/test_coordinator/belt_wear_history')
     wear = wear_topic['array'][0]
 
 
-    failure_topic = topic_dict.pop('/test_failure')
+    failure_topic = topic_dict.pop('/test_coordinator/test_failure')
     if failure_topic['array'].size > 0:
         failure_msg = '__'.join([failure_topic['array'][i].replace(',', '-').replace('\n', '__') for i in range(failure_topic['array'].size)])
     else:
         failure_msg = ''
 
-    area_topic = topic_dict.pop('/grind_area')
+    area_topic = topic_dict.pop('/test_coordinator/grind_area')
     if area_topic['array'].size > 0:
         # Multiply belt width and thickness converted from meters to mm
         area = area_topic['array'][0,0] * 1000 * area_topic['array'][0,1] * 1000
@@ -227,7 +230,16 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         belt_width = 25.00                 #currently hard coded
 
     #Compute factored grind time & material removal
-    grind_settings_topic = topic_dict.pop('/grind_settings')
+    grind_settings_topic = topic_dict.pop('/rws_motion_client/grind_settings')
+
+    # Extract single value messages
+    grinded_volume_topic = topic_dict.pop('/test_coordinator/volume')   
+    if precomputed_volume_loss is None:   
+        grinded_volume = grinded_volume_topic['array'][0, 1]
+        print(f'Removed_volume {grinded_volume:.3f}')
+    else:
+        grinded_volume = precomputed_volume_loss
+        print(f'Removed volume precomputed: {grinded_volume:.3f}')
 
     # Synchronize the timestamps for all topics
     for key in topic_dict.keys():
@@ -241,7 +253,6 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         topic_array = remove_zero_entries(topic_dict[key]['array'])
         topic_dict[key]['array'] = remove_time_offset(topic_array, offset)
     
-
     # Set start time to zero
     min_time = min([np.min(topic_dict[topic]['array'][:,0]) for topic in topic_dict.keys()])
     for topic in topic_dict.keys():
@@ -253,23 +264,13 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     unique_timestamps = sorted(list(unique_timestamp_set))
     print(f"Number of timestamps: {len(unique_timestamps)} - ranging {unique_timestamps[-1]/10**9:.2f} seconds")
     
-    # Extract single value messages
-    grinded_volume_topic = topic_dict.pop('/scanner/volume')   
-    if precomputed_volume_loss is None:   
-        grinded_volume = grinded_volume_topic['array'][0, 1]
-        print(f'Removed_volume {grinded_volume:.3f}')
-    else:
-        grinded_volume = precomputed_volume_loss
-        print(f'Removed volume precomputed: {grinded_volume:.3f}')
-
     #Compute Factored time and volume
     calc_pass_length = grind_settings_topic['array'][0, 0] * grind_settings_topic['array'][0, 2] / grind_settings_topic['array'][0, 1]
     fact_grind_time = grind_settings_topic['array'][0, 1] * belt_width / grind_settings_topic['array'][0, 0]
-    fact_volume = grinded_volume * belt_width / calc_pass_length
 
 
     # results = f'th{plate_thickness}_d{removed_material_depth}'
-    results = f'v{grinded_volume:.3f}_w{wear:.1f}_a{area:.2f}_bw{belt_width:.2f}_fv{fact_volume:.3f}_ft{fact_grind_time:.2f}'
+    results = f'v{grinded_volume:.3f}_w{wear:.1f}_a{area:.2f}_bw{belt_width:.2f}_ft{fact_grind_time:.2f}'
     filename_stripped, filename_timestamp = strip_filename_timestamp(bagpath.parts[-1])
     csv_filename = output_folder / f'{filename_stripped}_{results}__{filename_timestamp}.csv'
 
@@ -371,7 +372,7 @@ if __name__ == '__main__':
     data_path = Path('/workspaces/BrightSkyRepoLinux/') 
 
     # An identifier for the files that have to be processed 
-    test_identifiers = ['']
+    test_identifiers = ['samplemoving']
 
     bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
 
