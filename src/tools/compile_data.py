@@ -87,7 +87,7 @@ def compile_data_from_csv_bag(filename, bag_csv_folder_path, compilation_path, c
 
 
     entries = [grind_time_s, avg_rpm, mean_absolute_deviation_rpm, avg_force, mean_absolute_deviation_force, avg_position, mean_absolute_deviation_position, grit, grinded_volume, grind_area, wear, force_setpoint, rpm_setpoint, feed_rate_setpoint, num_pass_setpoint, pass_length, contact_time, failure_msg]
-    headers = ['grind_time', 'avg_rpm', 'mad_rpm', 'avg_force', 'mad_force', 'avg_position', 'mad_position', 'grit', 'removed_material_mid', 'grind_area', 'initial_wear', 'force_setpoint', 'rpm_setpoint', 'feed_rate_setpoint', 'num_pass_setpoint','pass_length', 'contact_time', 'failure_msg']
+    headers = ['grind_time', 'avg_rpm', 'mad_rpm', 'avg_force', 'mad_force', 'avg_position', 'mad_position', 'grit', 'removed_material', 'grind_area', 'initial_wear', 'force_setpoint', 'rpm_setpoint', 'feed_rate_setpoint', 'num_pass_setpoint','pass_length', 'contact_time', 'failure_msg']
 
     with open(compilation_path, 'r+') as f:
         current_data = [line for line in f.readlines()]

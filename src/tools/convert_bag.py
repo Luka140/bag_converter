@@ -109,7 +109,7 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         precomputed_volume_loss (list[float], optional): List of precomputed volumes which will overwrite the values in the rosbag messages if applicable.
 
     """
-    print('start converting')
+    print('\n\nStarting conversion')
     # Relative path to the definition of each custom message type 
     msg_paths = [Path('src/stamped_std_msgs/msg/Float32Stamped.msg'),
                 Path('src/stamped_std_msgs/msg/Int32Stamped.msg'),
@@ -167,14 +167,15 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
     #[add_types.update(get_types_from_msg(msg_path.read_text(), path_to_type(msg_path))) for msg_path in msg_paths]
     typestore = get_typestore(Stores.ROS2_HUMBLE)
     typestore.register(add_types)
-    output_folder = Path('csv_bags')
+    if output_folder is None:
+        output_folder = Path('csv_bags')
     
     # Read all messages and parse them according to the 'parser' in topic_dict
     # Stores the messages for each respective topic in an np.ndarray located in topic_dict['topic_name']['array']
     print(f'Reading and Parsing messages: {bagpath}')
     with AnyReader([bagpath], default_typestore=typestore) as reader:
         for topic in topic_dict.keys():
-            print(f"Processing topic {topic}")
+            # print(f"Processing topic {topic}")
             process_func = topic_dict[topic]['parser']
             # Pre-load an array into the dict in case the topic has no connections 
             topic_dict[topic]['array'] = np.array([])
@@ -198,7 +199,8 @@ def convert_bag(bagpath, precomputed_volume_loss = None, overwrite_area = None, 
         return
 
     if topic_dict['/test_coordinator/belt_wear_history']['array'].size < 1:
-        print('Bag does not contain belt wear --not skipping')
+        print('Bag does not contain belt wear --skipping')
+        return
 
     
     if topic_dict['/test_coordinator/grind_area']['array'].size < 1 and overwrite_area is None:
@@ -372,7 +374,7 @@ if __name__ == '__main__':
     data_path = Path('/workspaces/brightsky_project/src/data_gathering/data/test_data') 
 
     # An identifier for the files that have to be processed 
-    test_identifiers = ['moving_grind_lowered_rpmv2']
+    test_identifiers = ['moving_grind_lowered_rpm']
 
     bags = [path for path in data_path.iterdir() if 'rosbag' in str(path) and any([identifier in str(path) for identifier in test_identifiers])]
 
